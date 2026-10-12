@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>מעקב גב</title>
+  <meta name="theme-color" content="#0f766e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="מעקב גב">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="app"></main>
+
+  <nav id="tabs">
+    <button data-act="go" data-v="home"><span class="ic">⌂</span>בית</button>
+    <button data-act="go" data-v="history"><span class="ic">☰</span>היסטוריה</button>
+    <button data-act="go" data-v="summary"><span class="ic">✎</span>למטפל</button>
+    <button data-act="go" data-v="settings"><span class="ic">⚙</span>גיבוי</button>
+  </nav>
+
+  <div id="sheet" hidden></div>
+  <div id="toast" hidden></div>
+  <input type="file" id="importFile" accept="application/json,.json" hidden>
+
+  <script src="app.js"></script>
+</body>
+</html>

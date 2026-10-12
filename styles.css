@@ -65,6 +65,17 @@ button { cursor: pointer; }
 .danger { background: none; border: 1.5px solid var(--danger); color: var(--danger); border-radius: 14px; padding: 12px 16px; width: 100%; font-weight: 600; margin-top: 4px; }
 .btn-col { display: grid; gap: 10px; }
 
+/* sync status */
+#syncbar { display: block; margin: 8px auto 0; border: 0; border-radius: 999px; padding: 4px 12px; font-size: 13px; background: var(--card); color: var(--muted); }
+#syncbar.s-ok { background: none; }
+#syncbar.s-off, #syncbar.s-auth, #syncbar.s-error { background: #fdecea; color: var(--danger); font-weight: 600; }
+#syncbar.s-pending, #syncbar.s-offline { background: #fff4d6; color: #8a5a00; font-weight: 600; }
+body.editing #syncbar { display: none; }
+.secret-row { display: flex; gap: 8px; align-items: center; }
+.secret-row .secret { flex: 1; min-width: 0; overflow-wrap: anywhere; background: var(--bg); border-radius: 10px; padding: 10px; font-size: 14px; }
+.secret-row button { width: auto; flex: none; }
+input[type=url] { width: 100%; border: 1.5px solid var(--line); border-radius: 12px; padding: 11px; background: var(--bg); font-size: 16px; }
+
 /* hero */
 .hero { text-align: center; padding: 20px 14px; }
 .hero .big { font-size: 56px; font-weight: 800; line-height: 1; color: var(--accent); }
@@ -169,6 +180,6 @@ table.rt .k { font-size: 12px; color: var(--muted); }
 
 @media print {
   body { background: #fff; padding: 0; }
-  #tabs, .no-print, #sheet, #toast { display: none !important; }
+  #tabs, #syncbar, .no-print, #sheet, #toast { display: none !important; }
   .card { break-inside: avoid; border: 1px solid #ddd; }
 }

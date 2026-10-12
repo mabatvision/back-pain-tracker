@@ -98,21 +98,107 @@ const PANELS = [
 for (const p of PANELS) for (const m of p.svg.matchAll(/data-r="([^"]+)"/g)) PANEL_OF[m[1]] = p.id;
 
 /* ================= storage ================= */
+// The Google Sheet is the only real store. The phone keeps just the connection settings
+// and changes that haven't reached the sheet yet (e.g. logged without reception).
 
-const KEY = 'backtracker.v1';
-function load() {
+const CFG_KEY = 'backtracker.cloud', QUEUE_KEY = 'backtracker.queue', LEGACY_KEY = 'backtracker.v1';
+const ls = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('שגיאה בשמירה!'); } },
+};
+let cfg = ls.get(CFG_KEY, { url: '', secret: '' });
+let queue = ls.get(QUEUE_KEY, []);          // pending ops, oldest first
+let server = { entries: [], visits: [] };   // last copy received from the sheet (memory only)
+let db = { entries: [], visits: [] };       // what the screens show = server + pending ops
+let loaded = false;                         // got data from the sheet at least once this session
+let syncState = 'off';
+
+function applyOp(d, op) {
+  if (op.op === 'upsert') d.entries = d.entries.filter(e => e.id !== op.entry.id).concat(op.entry);
+  else if (op.op === 'delete') d.entries = d.entries.filter(e => e.id !== op.id);
+  else if (op.op === 'addVisit') { if (!d.visits.includes(op.ts)) d.visits = d.visits.concat(op.ts); }
+  else if (op.op === 'delVisit') d.visits = d.visits.filter(v => v !== op.ts);
+}
+function rebuild() {
+  const d = { entries: [...server.entries], visits: [...server.visits] };
+  queue.forEach(op => applyOp(d, op));
+  db = d;
+}
+function change(...ops) {
+  queue.push(...ops); ls.set(QUEUE_KEY, queue);
+  rebuild(); syncNow();
+}
+
+// readable columns for the sheet; the full entry also goes along as JSON
+function upsertOp(e) {
+  const regions = regionList(e.regions || {}).map(r => {
+    const v = e.regions[r];
+    return `${REGIONS[r]}: ${KINDS[v.kind].label} ${v.level}${v.nature !== 'unsure' ? ' ' + NATURES[v.nature] : ''}`;
+  }).join('; ');
+  return { op: 'upsert', entry: e, cells: [fmtDate(e.ts), fmtTime(e.ts), entryMax(e) || '', e.episode ? 'כן' : '',
+    regions, (e.triggers || []).join(', '), e.notes || ''] };
+}
+const visitOp = ts => ({ op: 'addVisit', ts, label: fmtDate(ts) });
+
+// one-time move of data from the first (phone-only) version into the queue
+function migrateLegacy() {
+  const old = ls.get(LEGACY_KEY, null);
+  if (!old || !Array.isArray(old.entries)) return;
+  queue.push(...old.entries.map(upsertOp), ...(old.visits || []).map(visitOp));
+  ls.set(QUEUE_KEY, queue);
+  try { localStorage.removeItem(LEGACY_KEY); } catch (e) { /* ignore */ }
+}
+
+let syncing = null, retryTimer = null;
+async function syncNow() {
+  if (!cfg.url || !cfg.secret) return setSync('off');
+  if (syncing) { syncing.again = true; return syncing.done; }
+  let finish;
+  syncing = { again: false, done: new Promise(r => (finish = r)) };
+  const sent = queue.slice();
+  setSync('busy');
   try {
-    const d = JSON.parse(localStorage.getItem(KEY));
-    if (d && Array.isArray(d.entries)) return { visits: [], lastBackup: null, ...d };
-  } catch (e) { /* ignore */ }
-  return { entries: [], visits: [], lastBackup: null };
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
+    const res = await fetch(cfg.url, {
+      method: 'POST', signal: ctl.signal,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // "simple" request: no CORS preflight
+      body: JSON.stringify({ secret: cfg.secret, ops: sent }),
+    });
+    clearTimeout(timer);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    queue = queue.slice(sent.length); ls.set(QUEUE_KEY, queue); // ops are idempotent, so a resend is harmless
+    server = { entries: data.entries || [], visits: data.visits || [] };
+    loaded = true; rebuild();
+    setSync(queue.length ? 'pending' : 'ok');
+    if (['home', 'history', 'summary'].includes(view)) render();
+  } catch (err) {
+    setSync(err.message === 'unauthorized' ? 'auth' : navigator.onLine === false ? 'offline' : 'error');
+  }
+  const again = syncing.again;
+  syncing = null; finish();
+  clearTimeout(retryTimer);
+  if (again) return syncNow();
+  if (syncState !== 'auth' && (queue.length || !loaded)) retryTimer = setTimeout(syncNow, 30000);
 }
-function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(db)); }
-  catch (e) { toast('שגיאה בשמירה!'); }
+
+const SYNC_TEXT = {
+  off: 'לא מחובר לענן – להגדרה',
+  busy: 'מסנכרן…',
+  ok: 'מסונכרן ✓',
+  pending: 'יש שינויים שממתינים לשליחה',
+  offline: 'אין אינטרנט – יישלח כשיחזור החיבור',
+  auth: 'הקוד הסודי לא תואם לסקריפט',
+  error: 'אין חיבור לגיליון – ננסה שוב',
+};
+function setSync(state) {
+  syncState = state;
+  const el = $('#syncbar'), n = queue.length;
+  el.className = 's-' + state;
+  el.textContent = SYNC_TEXT[state] + (n && !['ok', 'off', 'busy'].includes(state) ? ` (${n})` : '');
+  el.dataset.act = state === 'off' || state === 'auth' ? 'go' : 'sync';
+  el.dataset.v = 'settings';
 }
-let db = load();
-if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
 /* ================= helpers ================= */
 
@@ -265,6 +351,15 @@ function entryRow(e) {
     </div></button>`;
 }
 
+// shown above data screens until the sheet has answered at least once
+function cloudNote() {
+  if (!cfg.url) return `<section class="card"><b>האפליקציה עוד לא מחוברת לגיליון.</b>
+    <div class="muted">תיעודים חדשים נשמרים בינתיים בטלפון ויישלחו אחרי החיבור.</div>
+    <button class="secondary" style="margin-top:10px" data-act="go" data-v="settings">לחיבור</button></section>`;
+  if (loaded) return '';
+  return `<section class="card muted">${syncState === 'busy' ? 'טוען נתונים מהגיליון…' : 'אין חיבור לגיליון – הנתונים יוצגו כשיחזור החיבור.'}</section>`;
+}
+
 const VIEWS = {
   home() {
     const all = sortedEntries();
@@ -279,6 +374,7 @@ const VIEWS = {
     return `
       <header class="top"><h1>מעקב גב</h1><div class="sub">${fmtDay(Date.now())}</div></header>
       <button class="primary huge" data-act="new">＋ כואב לי עכשיו – לתעד</button>
+      ${cloudNote()}
       <section class="card hero">${hero}</section>
       <section class="card"><h2>7 הימים האחרונים</h2>
         <div class="stats">
@@ -338,7 +434,7 @@ const VIEWS = {
       groups += entryRow(e);
     }
     return `
-      <header class="top"><h1>היסטוריה</h1></header>
+      <header class="top"><h1>היסטוריה</h1></header>${cloudNote()}
       <div class="seg page-seg">${[[7, 'שבוע'], [30, 'חודש'], [90, '3 חודשים'], ['all', 'הכל']].map(([v, l]) =>
         `<button class="${histRange === v ? 'on' : ''}" data-act="hrange" data-v="${v}">${l}</button>`).join('')}</div>
       <section class="card"><h2>עוצמת כאב לאורך זמן</h2>${chartSvg(list, from)}${CHART_NOTE}</section>
@@ -371,7 +467,7 @@ const VIEWS = {
     const usedMaps = PANELS.filter(p => Object.keys(regs).some(r => PANEL_OF[r] === p.id));
 
     return `
-      <header class="top"><h1>סיכום למטפל</h1></header>
+      <header class="top"><h1>סיכום למטפל</h1></header>${cloudNote()}
       <div class="seg page-seg no-print">${ranges.map(([v, l]) => `<button class="${sumRange === v ? 'on' : ''}" data-act="srange" data-v="${v}">${l}</button>`).join('')}</div>
       <section class="card">
         <h2>${fmtDate(from)} – ${fmtDate(Date.now())}${sumRange === 'visit' && lastVisit ? ' <span class="muted">(מאז הביקור האחרון)</span>' : ''}</h2>
@@ -401,17 +497,24 @@ const VIEWS = {
   },
 
   settings() {
-    const lb = db.lastBackup;
     const visits = [...db.visits].sort((a, b) => b - a);
+    const connected = cfg.url && cfg.secret;
     return `
-      <header class="top"><h1>גיבוי והגדרות</h1></header>
+      <header class="top"><h1>ענן והגדרות</h1></header>
       <section class="card">
-        <h2>גיבוי</h2>
-        <p class="muted">כל הנתונים נשמרים רק בטלפון הזה, בלי ענן. כדאי לגבות מדי פעם לקובץ (למשל ל-iCloud Drive / הקבצים), כדי שלא יאבדו אם מחליפים טלפון.</p>
-        <p>${db.entries.length} תיעודים · גיבוי אחרון: <b>${lb ? fmtDate(lb) : 'אף פעם'}</b></p>
-        <div class="btn-col">
-          <button class="primary" data-act="export">ייצוא גיבוי לקובץ</button>
-          <button class="secondary" data-act="import">שחזור מקובץ גיבוי</button>
+        <h2>חיבור ל-Google Sheets</h2>
+        <p class="muted">כל התיעודים נשמרים בגיליון בחשבון Google שלך. בטלפון נשמרים רק תיעודים שעוד לא נשלחו (למשל כשאין קליטה).</p>
+        <label class="fl">1. הקוד הסודי – להדביק בסקריפט</label>
+        <div class="secret-row"><code class="secret" dir="ltr">${esc(cfg.secret)}</code><button class="secondary" data-act="copy-secret">העתקה</button></div>
+        <label class="fl" style="margin-top:14px">2. כתובת הסקריפט (Web app URL)</label>
+        <input type="url" id="cfgUrl" dir="ltr" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.url)}">
+        <div class="btn-col" style="margin-top:10px">
+          <button class="primary" data-act="connect">${connected ? 'שמירה וסנכרון' : 'התחברות'}</button>
+        </div>
+        ${connected ? `<p class="muted">מצב: ${SYNC_TEXT[syncState]} · ${db.entries.length} תיעודים</p>` : ''}
+        <div style="display:flex;justify-content:space-between">
+          <button class="link" data-act="new-secret">קוד סודי חדש</button>
+          ${connected ? '<button class="link" data-act="disconnect">ניתוק מהגיליון</button>' : ''}
         </div>
       </section>
       <section class="card">
@@ -419,10 +522,14 @@ const VIEWS = {
         ${visits.length ? `<ul class="notes-list">${visits.map(v => `<li style="display:flex;justify-content:space-between;align-items:center">${fmtDay(v)}<button class="link" data-act="delvisit" data-v="${v}">הסרה</button></li>`).join('')}</ul>` : '<div class="muted">עוד לא נרשמו ביקורים. אפשר לרשום ממסך "למטפל".</div>'}
       </section>
       <section class="card">
-        <h2>מחיקת כל הנתונים</h2>
-        <button class="danger" data-act="wipe">מחיקת הכל</button>
+        <h2>קובץ גיבוי (רשות)</h2>
+        <p class="muted">הגיליון הוא הגיבוי. אפשר בנוסף לשמור עותק כקובץ, או לטעון קובץ גיבוי.</p>
+        <div class="btn-col">
+          <button class="secondary" data-act="export">ייצוא לקובץ</button>
+          <button class="secondary" data-act="import">טעינה מקובץ</button>
+        </div>
       </section>
-      <p class="muted" style="text-align:center">מעקב גב · גרסה 1.0</p>`;
+      <p class="muted" style="text-align:center">מעקב גב · גרסה 2.0</p>`;
   },
 };
 
@@ -498,7 +605,7 @@ function summaryText() {
 }
 
 async function exportBackup() {
-  const json = JSON.stringify({ app: 'back-tracker', version: 1, exported: Date.now(), ...db }, null, 1);
+  const json = JSON.stringify({ app: 'back-tracker', version: 2, exported: Date.now(), ...db }, null, 1);
   const name = `back-tracker-${dayKey(Date.now())}.json`;
   const file = new File([json], name, { type: 'application/json' });
   try {
@@ -509,7 +616,7 @@ async function exportBackup() {
       a.href = URL.createObjectURL(file); a.download = name; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     }
-    db.lastBackup = Date.now(); save(); render(); toast('הגיבוי נשמר');
+    toast('הקובץ נשמר');
   } catch (e) {
     if (e.name !== 'AbortError') toast('הייצוא נכשל');
   }
@@ -522,13 +629,9 @@ $('#importFile').addEventListener('change', async ev => {
   try {
     const d = JSON.parse(await f.text());
     if (!Array.isArray(d.entries)) throw new Error('bad');
-    const byId = Object.fromEntries(db.entries.map(e => [e.id, e]));
-    let added = 0;
-    for (const e of d.entries) { if (!byId[e.id]) added++; byId[e.id] = e; }
-    db.entries = Object.values(byId);
-    db.visits = [...new Set([...db.visits, ...(d.visits || [])])];
-    save(); render();
-    toast(`שוחזרו ${d.entries.length} תיעודים (${added} חדשים)`);
+    change(...d.entries.map(upsertOp), ...(d.visits || []).filter(v => !db.visits.includes(v)).map(visitOp));
+    render();
+    toast(`נטענו ${d.entries.length} תיעודים`);
   } catch (e) { toast('הקובץ לא תקין'); }
 });
 
@@ -553,12 +656,11 @@ const ACTIONS = {
     if (!Object.keys(draft.regions).length && !draft.episode && !draft.notes.trim())
       return toast('סמן לפחות אזור אחד באיור');
     const { isNew, ...e } = draft;
-    db.entries = db.entries.filter(x => x.id !== e.id).concat(e);
-    save(); draft = null; toast('נשמר ✓'); go(isNew ? 'home' : 'history');
+    change(upsertOp(e)); draft = null; toast('נשמר ✓'); go(isNew ? 'home' : 'history');
   },
   delete: () => {
     if (!confirm('למחוק את התיעוד הזה?')) return;
-    db.entries = db.entries.filter(x => x.id !== draft.id); save(); draft = null; go('history');
+    change({ op: 'delete', id: draft.id }); draft = null; go('history');
   },
   panel: a => { panel = a.dataset.p; render(); },
   region: a => openSheet(a.dataset.r),
@@ -586,15 +688,33 @@ const ACTIONS = {
   print: () => window.print(),
   visit: () => {
     if (!confirm('לרשום שהיום היית אצל המטפל? הסיכום הבא יתחיל מהיום.')) return;
-    db.visits.push(Date.now()); save(); sumRange = 'visit'; render(); toast('נרשם ביקור');
+    change(visitOp(Date.now())); sumRange = 'visit'; render(); toast('נרשם ביקור');
   },
-  delvisit: a => { db.visits = db.visits.filter(v => v !== +a.dataset.v); save(); render(); },
+  delvisit: a => { change({ op: 'delVisit', ts: +a.dataset.v }); render(); },
   export: exportBackup,
   import: () => $('#importFile').click(),
-  wipe: () => {
-    if (!confirm('למחוק את כל התיעודים? לא ניתן לבטל.')) return;
-    if (!confirm('בטוח? מומלץ לייצא גיבוי קודם.')) return;
-    db = { entries: [], visits: [], lastBackup: null }; save(); go('home');
+  sync: () => syncNow(),
+  'copy-secret': async () => {
+    try { await navigator.clipboard.writeText(cfg.secret); toast('הקוד הועתק'); }
+    catch (e) { toast('לא הצלחתי להעתיק – סמן את הקוד והעתק ידנית'); }
+  },
+  'new-secret': () => {
+    if (cfg.url && !confirm('קוד חדש יחייב לעדכן גם את הסקריפט בגיליון. להמשיך?')) return;
+    cfg.secret = newSecret(); ls.set(CFG_KEY, cfg); render(); syncNow();
+  },
+  connect: async () => {
+    const url = $('#cfgUrl').value.trim();
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url))
+      return toast('הכתובת צריכה להיראות כך: https://script.google.com/macros/s/…/exec');
+    cfg.url = url; ls.set(CFG_KEY, cfg); loaded = false;
+    await syncNow();
+    render();
+    toast(loaded ? `מחובר ✓ (${db.entries.length} תיעודים בגיליון)` : SYNC_TEXT[syncState]);
+  },
+  disconnect: () => {
+    if (!confirm('לנתק את האפליקציה מהגיליון? הנתונים נשארים בגיליון.')) return;
+    cfg.url = ''; ls.set(CFG_KEY, cfg); server = { entries: [], visits: [] }; loaded = false;
+    rebuild(); setSync('off'); render();
   },
 };
 
@@ -613,7 +733,18 @@ document.addEventListener('change', e => {
   if (e.target.dataset.field === 'episode' && draft) draft.episode = e.target.checked;
 });
 
+function newSecret() {
+  const b = crypto.getRandomValues(new Uint8Array(18));
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_');
+}
+if (!cfg.secret) { cfg.secret = newSecret(); ls.set(CFG_KEY, cfg); }
+migrateLegacy();
+rebuild();
+setSync('off');
 render();
+syncNow();
+window.addEventListener('online', () => syncNow());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:')
   navigator.serviceWorker.register('sw.js').catch(() => {});

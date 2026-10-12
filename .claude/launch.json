@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "back-tracker", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "8765"], "port": 8765 }
+    { "name": "back-tracker", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "8765"], "port": 8765 },
+    { "name": "mock-sheet", "runtimeExecutable": "node", "runtimeArgs": ["dev/mock-apps-script.js", "8766", "test-secret"], "port": 8766 }
   ]
 }

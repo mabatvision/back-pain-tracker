@@ -1,5 +1,5 @@
 /**
- * מעקב גב – שרת קטן שרץ בתוך Google Sheets.
+ * מעגב – שרת קטן שרץ בתוך Google Sheets.
  * הסקריפט יכול לגשת רק לגיליון שהוא מחובר אליו (בזכות השורה @OnlyCurrentDoc).
  *
  * @OnlyCurrentDoc

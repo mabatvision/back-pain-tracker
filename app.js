@@ -391,7 +391,7 @@ const VIEWS = {
          <div class="lbl">ימים מאז שהגב נתפס לאחרונה</div><div class="muted">${fmtDay(lastEp.ts)}</div>`
       : `<div class="lbl">עוד לא תועד מצב שהגב נתפס</div><div class="muted">כשזה קורה – סמן "נתפס הגב" בתיעוד</div>`;
     return `
-      <header class="top"><h1>מעקב גב</h1><div class="sub">${fmtDay(Date.now())}</div></header>
+      <header class="top"><h1>מעגב</h1><div class="sub">${fmtDay(Date.now())}</div></header>
       <button class="primary huge" data-act="new">＋ כואב לי עכשיו – לתעד</button>
       ${cloudNote()}
       <section class="card hero">${hero}</section>
@@ -548,7 +548,7 @@ const VIEWS = {
           <button class="secondary" data-act="import">טעינה מקובץ</button>
         </div>
       </section>
-      <p class="muted" style="text-align:center">מעקב גב · גרסה 2.0</p>`;
+      <p class="muted" style="text-align:center">מעגב · גרסה 2.0</p>`;
   },
 };
 

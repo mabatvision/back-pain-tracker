@@ -17,7 +17,9 @@ const REGIONS = {
   'lum-l': 'גב תחתון – צד שמאל', 'lum-c': 'גב תחתון – עמוד השדרה', 'lum-r': 'גב תחתון – צד ימין',
   'sacrum': 'עצה (סקרום)', 'glute-l': 'ישבן שמאל', 'glute-r': 'ישבן ימין',
   // left leg
-  'ham': 'ירך אחורית', 'knee-b': 'שקע הברך', 'calf': 'שוק אחורית (תאומים)', 'achilles': 'גיד אכילס',
+  'ham-lat': 'ירך אחורית – צד חיצוני', 'ham-med': 'ירך אחורית – צד פנימי',
+  'knee-b-lat': 'שקע הברך – צד חיצוני', 'knee-b-med': 'שקע הברך – צד פנימי',
+  'calf-lat': 'שוק אחורית – צד חיצוני', 'calf-med': 'שוק אחורית – צד פנימי', 'achilles': 'גיד אכילס',
   'quad': 'ירך קדמית', 'thigh-lat': 'ירך – צד חיצוני', 'knee-f': 'ברך', 'shin': 'שוק קדמית', 'shin-lat': 'שוק – צד חיצוני',
   // left foot – top
   'toe-big': 'בוהן (מלמעלה)', 'toe-2': 'אצבע 2 (מלמעלה)', 'toe-3': 'אצבע 3 (מלמעלה)', 'toe-4': 'אצבע 4 (מלמעלה)', 'toe-5': 'זרת (מלמעלה)',
@@ -29,6 +31,7 @@ const REGIONS = {
   'arch': 'קשת כף הרגל', 'sole-lat': 'סוליה – צד חיצוני', 'heel-med': 'עקב – צד פנימי', 'heel-lat': 'עקב – צד חיצוני',
   // used by version 1 (no longer drawn, kept so old entries still read well)
   'toes': 'אצבעות (מלמעלה)', 'sole-toes': 'אצבעות (סוליה)', 'ball': 'כרית כף הרגל', 'heel': 'עקב',
+  'ham': 'ירך אחורית', 'knee-b': 'שקע הברך', 'calf': 'שוק אחורית (תאומים)',
 };
 const REGION_ORDER = Object.keys(REGIONS);
 const PANEL_OF = {};
@@ -59,9 +62,12 @@ const PANELS = [
 <svg viewBox="0 0 240 322" class="body">
   <ellipse class="deco" cx="68" cy="306" rx="13" ry="6"/>
   <path class="deco" d="M166,292 L188,292 L196,306 L160,306 Z"/>
-  <path class="rg" data-r="ham" d="M40,24 Q66,14 92,24 L86,140 L48,140 Z"/>
-  <path class="rg" data-r="knee-b" d="M48,140 L86,140 L84,172 L50,172 Z"/>
-  <path class="rg" data-r="calf" d="M50,172 L84,172 Q92,212 80,260 L56,260 Q42,212 50,172 Z"/>
+  <path class="rg" data-r="ham-lat" d="M40,24 Q53,19 66,19 L67,140 L48,140 Z"/>
+  <path class="rg" data-r="ham-med" d="M66,19 Q79,19 92,24 L86,140 L67,140 Z"/>
+  <path class="rg" data-r="knee-b-lat" d="M48,140 L67,140 L67,172 L50,172 Z"/>
+  <path class="rg" data-r="knee-b-med" d="M67,140 L86,140 L84,172 L67,172 Z"/>
+  <path class="rg" data-r="calf-lat" d="M50,172 L67,172 L68,260 L56,260 Q42,212 50,172 Z"/>
+  <path class="rg" data-r="calf-med" d="M67,172 L84,172 Q92,212 80,260 L68,260 Z"/>
   <path class="rg" data-r="achilles" d="M56,260 L80,260 L76,298 L60,298 Z"/>
   <path class="rg" data-r="quad" d="M150,24 Q170,16 188,20 L184,140 L156,140 Z"/>
   <path class="rg" data-r="thigh-lat" d="M188,20 Q200,22 205,30 L196,140 L184,140 Z"/>
@@ -69,6 +75,7 @@ const PANELS = [
   <path class="rg" data-r="shin" d="M159,172 L180,172 L177,292 L166,292 Q160,230 159,172 Z"/>
   <path class="rg" data-r="shin-lat" d="M180,172 L193,172 Q198,220 188,292 L177,292 Z"/>
   <text class="cap" x="24" y="90">חוץ</text>
+  <text class="cap" x="121" y="90">פנים</text>
   <text class="cap" x="220" y="90">חוץ</text>
   <text class="cap" x="66" y="320">מאחור</text>
   <text class="cap" x="176" y="320">מלפנים</text>

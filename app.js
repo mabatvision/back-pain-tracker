@@ -26,9 +26,9 @@ const REGIONS = {
   // left foot – sole
   'sole-big': 'בוהן (סוליה)', 'sole-toe-2': 'אצבע 2 (סוליה)', 'sole-toe-3': 'אצבע 3 (סוליה)', 'sole-toe-4': 'אצבע 4 (סוליה)', 'sole-toe-5': 'זרת (סוליה)',
   'ball-med': 'כרית כף הרגל – פנימי (מתחת לבוהן)', 'ball-lat': 'כרית כף הרגל – חיצוני',
-  'arch': 'קשת כף הרגל', 'sole-lat': 'סוליה – צד חיצוני', 'heel': 'עקב',
+  'arch': 'קשת כף הרגל', 'sole-lat': 'סוליה – צד חיצוני', 'heel-med': 'עקב – צד פנימי', 'heel-lat': 'עקב – צד חיצוני',
   // used by version 1 (no longer drawn, kept so old entries still read well)
-  'toes': 'אצבעות (מלמעלה)', 'sole-toes': 'אצבעות (סוליה)', 'ball': 'כרית כף הרגל',
+  'toes': 'אצבעות (מלמעלה)', 'sole-toes': 'אצבעות (סוליה)', 'ball': 'כרית כף הרגל', 'heel': 'עקב',
 };
 const REGION_ORDER = Object.keys(REGIONS);
 const PANEL_OF = {};
@@ -96,7 +96,8 @@ const PANELS = [
   <path class="rg" data-r="ball-lat" d="M164,88 Q140,74 102,72 L102,128 L160,128 Z"/>
   <path class="rg" data-r="arch" d="M40,128 L102,128 L100,200 L56,200 Q40,165 40,128 Z"/>
   <path class="rg" data-r="sole-lat" d="M102,128 L160,128 Q164,165 150,200 L100,200 Z"/>
-  <path class="rg" data-r="heel" d="M56,200 L150,200 Q156,262 103,264 Q50,262 56,200 Z"/>
+  <path class="rg" data-r="heel-med" d="M56,200 L100,200 L103,264 Q50,262 56,200 Z"/>
+  <path class="rg" data-r="heel-lat" d="M100,200 L150,200 Q156,262 103,264 Z"/>
   <ellipse class="rg" data-r="sole-toe-5" cx="150" cy="70" rx="9" ry="13"/>
   <ellipse class="rg" data-r="sole-toe-4" cx="131.5" cy="58" rx="10" ry="15"/>
   <ellipse class="rg" data-r="sole-toe-3" cx="111" cy="50" rx="10.5" ry="17"/>

@@ -19,11 +19,16 @@ const REGIONS = {
   // left leg
   'ham': 'ירך אחורית', 'knee-b': 'שקע הברך', 'calf': 'שוק אחורית (תאומים)', 'achilles': 'גיד אכילס',
   'quad': 'ירך קדמית', 'thigh-lat': 'ירך – צד חיצוני', 'knee-f': 'ברך', 'shin': 'שוק קדמית', 'shin-lat': 'שוק – צד חיצוני',
-  // left foot
-  'toe-big': 'בוהן גדולה (מלמעלה)', 'toes': 'אצבעות (מלמעלה)', 'dorsum': 'גב כף הרגל', 'ankle-f': 'קרסול – קדמי',
-  'mall-med': 'קרסול – עצם פנימית', 'mall-lat': 'קרסול – עצם חיצונית',
-  'sole-big': 'בוהן גדולה (מלמטה)', 'sole-toes': 'אצבעות (מלמטה)', 'ball': 'כרית כף הרגל', 'arch': 'קשת כף הרגל',
-  'sole-lat': 'סוליה – צד חיצוני', 'heel': 'עקב',
+  // left foot – top
+  'toe-big': 'בוהן (מלמעלה)', 'toe-2': 'אצבע 2 (מלמעלה)', 'toe-3': 'אצבע 3 (מלמעלה)', 'toe-4': 'אצבע 4 (מלמעלה)', 'toe-5': 'זרת (מלמעלה)',
+  'fore-top-med': 'גב כף הרגל – קדמי פנימי', 'fore-top-lat': 'גב כף הרגל – קדמי חיצוני', 'dorsum': 'גב כף הרגל – אמצע',
+  'ankle-f': 'קרסול – קדמי', 'mall-med': 'קרסול – עצם פנימית', 'mall-lat': 'קרסול – עצם חיצונית',
+  // left foot – sole
+  'sole-big': 'בוהן (סוליה)', 'sole-toe-2': 'אצבע 2 (סוליה)', 'sole-toe-3': 'אצבע 3 (סוליה)', 'sole-toe-4': 'אצבע 4 (סוליה)', 'sole-toe-5': 'זרת (סוליה)',
+  'ball-med': 'כרית כף הרגל – פנימי (מתחת לבוהן)', 'ball-lat': 'כרית כף הרגל – חיצוני',
+  'arch': 'קשת כף הרגל', 'sole-lat': 'סוליה – צד חיצוני', 'heel': 'עקב',
+  // used by version 1 (no longer drawn, kept so old entries still read well)
+  'toes': 'אצבעות (מלמעלה)', 'sole-toes': 'אצבעות (סוליה)', 'ball': 'כרית כף הרגל',
 };
 const REGION_ORDER = Object.keys(REGIONS);
 const PANEL_OF = {};
@@ -50,7 +55,7 @@ const PANELS = [
   <text class="cap" x="192" y="26">ימין</text>
   <text class="cap" x="110" y="286">מבט מאחור</text>
 </svg>` },
-  { id: 'leg', label: 'רגל שמאל', svg: `
+  { id: 'leg', label: 'רגל', svg: `
 <svg viewBox="0 0 240 322" class="body">
   <ellipse class="deco" cx="68" cy="306" rx="13" ry="6"/>
   <path class="deco" d="M166,292 L188,292 L196,306 L160,306 Z"/>
@@ -69,30 +74,36 @@ const PANELS = [
   <text class="cap" x="176" y="320">מלפנים</text>
 </svg>` },
   { id: 'foot', label: 'כף רגל', svg: `
-<svg viewBox="0 0 240 300" class="body">
-  <rect class="deco" x="50" y="240" width="36" height="36" rx="6"/>
-  <g class="rg" data-r="toes">
-    <ellipse cx="40" cy="104" rx="6" ry="8"/><ellipse cx="51" cy="95" rx="6.5" ry="9"/>
-    <ellipse cx="62" cy="89" rx="7" ry="10"/><ellipse cx="73" cy="86" rx="7" ry="10"/>
-  </g>
-  <ellipse class="rg" data-r="toe-big" cx="88" cy="86" rx="10" ry="15"/>
-  <path class="rg" data-r="dorsum" d="M34,114 Q60,98 98,104 L94,200 Q66,206 42,200 Z"/>
-  <path class="rg" data-r="ankle-f" d="M42,200 Q66,206 94,200 L90,242 L46,242 Z"/>
-  <circle class="rg" data-r="mall-med" cx="96" cy="228" r="9"/>
-  <circle class="rg" data-r="mall-lat" cx="40" cy="232" r="9"/>
-  <ellipse class="rg" data-r="sole-big" cx="152" cy="86" rx="10" ry="15"/>
-  <g class="rg" data-r="sole-toes">
-    <ellipse cx="167" cy="86" rx="7" ry="10"/><ellipse cx="178" cy="89" rx="7" ry="10"/>
-    <ellipse cx="189" cy="95" rx="6.5" ry="9"/><ellipse cx="200" cy="104" rx="6" ry="8"/>
-  </g>
-  <path class="rg" data-r="ball" d="M142,104 Q180,98 206,114 L202,150 L146,150 Z"/>
-  <path class="rg" data-r="arch" d="M146,150 L170,150 L168,222 L152,222 Q140,186 146,150 Z"/>
-  <path class="rg" data-r="sole-lat" d="M170,150 L202,150 Q206,186 196,222 L168,222 Z"/>
-  <path class="rg" data-r="heel" d="M152,222 L196,222 Q200,272 174,274 Q148,272 152,222 Z"/>
-  <text class="cap" x="22" y="70">חוץ</text><text class="cap" x="108" y="70">פנים</text>
-  <text class="cap" x="137" y="70">פנים</text><text class="cap" x="220" y="70">חוץ</text>
-  <text class="cap" x="68" y="294">מלמעלה</text>
-  <text class="cap" x="176" y="294">סוליה</text>
+<svg viewBox="0 0 200 280" class="body">
+  <rect class="deco" x="60" y="232" width="82" height="22"/>
+  <path class="rg" data-r="fore-top-lat" d="M36,88 Q60,74 98,72 L98,128 L40,128 Z"/>
+  <path class="rg" data-r="fore-top-med" d="M98,72 Q135,72 162,82 L160,128 L98,128 Z"/>
+  <path class="rg" data-r="dorsum" d="M40,128 L160,128 L156,190 Q100,198 46,190 Z"/>
+  <path class="rg" data-r="ankle-f" d="M46,190 Q100,198 156,190 L150,232 L52,232 Z"/>
+  <circle class="rg" data-r="mall-med" cx="162" cy="218" r="11"/>
+  <circle class="rg" data-r="mall-lat" cx="42" cy="222" r="11"/>
+  <ellipse class="rg" data-r="toe-5" cx="50" cy="70" rx="9" ry="13"/>
+  <ellipse class="rg" data-r="toe-4" cx="68.5" cy="58" rx="10" ry="15"/>
+  <ellipse class="rg" data-r="toe-3" cx="89" cy="50" rx="10.5" ry="17"/>
+  <ellipse class="rg" data-r="toe-2" cx="111" cy="46" rx="11" ry="18"/>
+  <ellipse class="rg" data-r="toe-big" cx="142" cy="52" rx="17" ry="26"/>
+  <text class="cap" x="18" y="112">חוץ</text><text class="cap" x="182" y="112">פנים</text>
+  <text class="cap" x="100" y="274">כף רגל שמאל – מלמעלה</text>
+</svg>` },
+  { id: 'sole', label: 'סוליה', svg: `
+<svg viewBox="0 0 200 280" class="body">
+  <path class="rg" data-r="ball-med" d="M102,72 Q65,72 38,82 L40,128 L102,128 Z"/>
+  <path class="rg" data-r="ball-lat" d="M164,88 Q140,74 102,72 L102,128 L160,128 Z"/>
+  <path class="rg" data-r="arch" d="M40,128 L102,128 L100,200 L56,200 Q40,165 40,128 Z"/>
+  <path class="rg" data-r="sole-lat" d="M102,128 L160,128 Q164,165 150,200 L100,200 Z"/>
+  <path class="rg" data-r="heel" d="M56,200 L150,200 Q156,262 103,264 Q50,262 56,200 Z"/>
+  <ellipse class="rg" data-r="sole-toe-5" cx="150" cy="70" rx="9" ry="13"/>
+  <ellipse class="rg" data-r="sole-toe-4" cx="131.5" cy="58" rx="10" ry="15"/>
+  <ellipse class="rg" data-r="sole-toe-3" cx="111" cy="50" rx="10.5" ry="17"/>
+  <ellipse class="rg" data-r="sole-toe-2" cx="89" cy="46" rx="11" ry="18"/>
+  <ellipse class="rg" data-r="sole-big" cx="58" cy="52" rx="17" ry="26"/>
+  <text class="cap" x="18" y="112">פנים</text><text class="cap" x="182" y="112">חוץ</text>
+  <text class="cap" x="100" y="276">כף רגל שמאל – סוליה</text>
 </svg>` },
 ];
 for (const p of PANELS) for (const m of p.svg.matchAll(/data-r="([^"]+)"/g)) PANEL_OF[m[1]] = p.id;

@@ -504,8 +504,8 @@ const VIEWS = {
       <section class="card">
         <h2>חיבור ל-Google Sheets</h2>
         <p class="muted">כל התיעודים נשמרים בגיליון בחשבון Google שלך. בטלפון נשמרים רק תיעודים שעוד לא נשלחו (למשל כשאין קליטה).</p>
-        <label class="fl">1. הקוד הסודי – להדביק בסקריפט</label>
-        <div class="secret-row"><code class="secret" dir="ltr">${esc(cfg.secret)}</code><button class="secondary" data-act="copy-secret">העתקה</button></div>
+        <label class="fl">1. הקוד הסודי – זהה לקוד שבשורה SECRET בסקריפט</label>
+        <div class="secret-row"><input id="cfgSecret" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" value="${esc(cfg.secret)}"><button class="secondary" data-act="copy-secret">העתקה</button></div>
         <label class="fl" style="margin-top:14px">2. כתובת הסקריפט (Web app URL)</label>
         <input type="url" id="cfgUrl" dir="ltr" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.url)}">
         <div class="btn-col" style="margin-top:10px">
@@ -695,7 +695,7 @@ const ACTIONS = {
   import: () => $('#importFile').click(),
   sync: () => syncNow(),
   'copy-secret': async () => {
-    try { await navigator.clipboard.writeText(cfg.secret); toast('הקוד הועתק'); }
+    try { await navigator.clipboard.writeText($('#cfgSecret').value.trim()); toast('הקוד הועתק'); }
     catch (e) { toast('לא הצלחתי להעתיק – סמן את הקוד והעתק ידנית'); }
   },
   'new-secret': () => {
@@ -703,10 +703,11 @@ const ACTIONS = {
     cfg.secret = newSecret(); ls.set(CFG_KEY, cfg); render(); syncNow();
   },
   connect: async () => {
-    const url = $('#cfgUrl').value.trim();
+    const url = $('#cfgUrl').value.trim(), secret = $('#cfgSecret').value.trim();
+    if (secret.length < 8) return toast('הקוד הסודי קצר מדי');
     if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url))
       return toast('הכתובת צריכה להיראות כך: https://script.google.com/macros/s/…/exec');
-    cfg.url = url; ls.set(CFG_KEY, cfg); loaded = false;
+    cfg.url = url; cfg.secret = secret; ls.set(CFG_KEY, cfg); loaded = false;
     await syncNow();
     render();
     toast(loaded ? `מחובר ✓ (${db.entries.length} תיעודים בגיליון)` : SYNC_TEXT[syncState]);

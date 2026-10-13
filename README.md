@@ -10,7 +10,7 @@
 1. ב-[sheets.new](https://sheets.new) ליצור גיליון חדש, ולתת לו שם (למשל "מעקב גב").
 2. בתפריט: **Extensions → Apps Script** (הרחבות ← Apps Script).
 3. למחוק את כל מה שיש בעורך, ולהדביק את כל התוכן של [`google-apps-script/Code.gs`](google-apps-script/Code.gs).
-4. באפליקציה בטלפון: לשונית **ענן** ← "העתקה" ליד הקוד הסודי. להדביק אותו בסקריפט בין המירכאות בשורה `const SECRET = '';`, ולשמור (Ctrl+S).
+4. לבחור קוד סודי (או להעתיק את הקוד שהאפליקציה מציעה בלשונית **ענן**) ולהדביק אותו בסקריפט בין המירכאות בשורה `const SECRET = '';`, ולשמור (Ctrl+S). את אותו קוד מזינים בכל מכשיר שמתחבר.
 5. **Deploy → New deployment** ← גלגל השיניים ← **Web app**:
    - Execute as: **Me**
    - Who has access: **Anyone**

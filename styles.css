@@ -72,7 +72,7 @@ button { cursor: pointer; }
 #syncbar.s-pending, #syncbar.s-offline { background: #fff4d6; color: #8a5a00; font-weight: 600; }
 body.editing #syncbar { display: none; }
 .secret-row { display: flex; gap: 8px; align-items: center; }
-.secret-row .secret { flex: 1; min-width: 0; overflow-wrap: anywhere; background: var(--bg); border-radius: 10px; padding: 10px; font-size: 14px; }
+.secret-row input { flex: 1; min-width: 0; border: 1.5px solid var(--line); border-radius: 12px; padding: 11px; background: var(--bg); font-size: 16px; font-family: ui-monospace, Menlo, monospace; }
 .secret-row button { width: auto; flex: none; }
 input[type=url] { width: 100%; border: 1.5px solid var(--line); border-radius: 12px; padding: 11px; background: var(--bg); font-size: 16px; }
 

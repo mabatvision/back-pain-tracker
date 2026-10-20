@@ -127,8 +127,9 @@ const ls = {
 };
 let cfg = ls.get(CFG_KEY, { url: '', secret: '' });
 let queue = ls.get(QUEUE_KEY, []);          // pending ops, oldest first
-let server = { entries: [], visits: [] };   // last copy received from the sheet (memory only)
-let db = { entries: [], visits: [] };       // what the screens show = server + pending ops
+const EMPTY = () => ({ entries: [], visits: [], exercises: [], plan: [] });
+let server = EMPTY();   // last copy received from the sheet (memory only)
+let db = EMPTY();       // what the screens show = server + pending ops
 let loaded = false;                         // got data from the sheet at least once this session
 let syncState = 'off';
 
@@ -137,9 +138,13 @@ function applyOp(d, op) {
   else if (op.op === 'delete') d.entries = d.entries.filter(e => e.id !== op.id);
   else if (op.op === 'addVisit') { if (!d.visits.includes(op.ts)) d.visits = d.visits.concat(op.ts); }
   else if (op.op === 'delVisit') d.visits = d.visits.filter(v => v !== op.ts);
+  else if (op.op === 'addEx') { if (!d.exercises.some(x => x.ts === op.ts)) d.exercises = d.exercises.concat({ ts: op.ts, ex: op.ex || '' }); }
+  else if (op.op === 'delEx') d.exercises = d.exercises.filter(x => x.ts !== op.ts);
+  else if (op.op === 'upsertPlan') d.plan = d.plan.filter(p => p.id !== op.item.id).concat(op.item);
+  else if (op.op === 'delPlan') { d.plan = d.plan.filter(p => p.id !== op.id); d.exercises = d.exercises.filter(x => x.ex !== op.id); }
 }
 function rebuild() {
-  const d = { entries: [...server.entries], visits: [...server.visits] };
+  const d = { entries: [...server.entries], visits: [...server.visits], exercises: [...server.exercises], plan: [...server.plan] };
   queue.forEach(op => applyOp(d, op));
   db = d;
 }
@@ -158,6 +163,9 @@ function upsertOp(e) {
     regions, (e.triggers || []).join(', '), e.notes || ''] };
 }
 const visitOp = ts => ({ op: 'addVisit', ts, label: fmtDate(ts) });
+const exOp = (ts, ex = '') => ({ op: 'addEx', ts, ex, name: exName(ex), date: fmtDate(ts), time: fmtTime(ts) });
+const planOp = p => ({ op: 'upsertPlan', item: p, cells: [p.name, p.details, p.perDay || '', fmtDate(p.start), p.end ? fmtDate(p.end) : ''] });
+const isExOp = op => ['addEx', 'delEx', 'upsertPlan', 'delPlan'].includes(op.op);
 
 // one-time move of data from the first (phone-only) version into the queue
 function migrateLegacy() {
@@ -186,10 +194,13 @@ async function syncNow() {
     clearTimeout(timer);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    queue = queue.slice(sent.length); ls.set(QUEUE_KEY, queue); // ops are idempotent, so a resend is harmless
-    server = { entries: data.entries || [], visits: data.visits || [] };
+    // a script from before exercises existed ignores their ops: keep them queued until it's updated
+    const oldScript = !Array.isArray(data.plan);
+    queue = (oldScript ? sent.filter(isExOp) : []).concat(queue.slice(sent.length));
+    ls.set(QUEUE_KEY, queue); // ops are idempotent, so a resend is harmless
+    server = { entries: data.entries || [], visits: data.visits || [], exercises: data.exercises || [], plan: data.plan || [] };
     loaded = true; rebuild();
-    setSync(queue.length ? 'pending' : 'ok');
+    setSync(oldScript && queue.some(isExOp) ? 'old' : queue.length ? 'pending' : 'ok');
     if (['home', 'history', 'summary'].includes(view)) render();
   } catch (err) {
     setSync(err.message === 'unauthorized' ? 'auth' : navigator.onLine === false ? 'offline' : 'error');
@@ -198,7 +209,7 @@ async function syncNow() {
   syncing = null; finish();
   clearTimeout(retryTimer);
   if (again) return syncNow();
-  if (syncState !== 'auth' && (queue.length || !loaded)) retryTimer = setTimeout(syncNow, 30000);
+  if (!['auth', 'old'].includes(syncState) && (queue.length || !loaded)) retryTimer = setTimeout(syncNow, 30000);
 }
 
 const SYNC_TEXT = {
@@ -208,6 +219,7 @@ const SYNC_TEXT = {
   pending: 'יש שינויים שממתינים לשליחה',
   offline: 'אין אינטרנט – יישלח כשיחזור החיבור',
   auth: 'הקוד הסודי לא תואם לסקריפט',
+  old: 'צריך לעדכן את הסקריפט בגיליון כדי לשמור תרגולים',
   error: 'אין חיבור לגיליון – ננסה שוב',
 };
 function setSync(state) {
@@ -215,7 +227,7 @@ function setSync(state) {
   const el = $('#syncbar'), n = queue.length;
   el.className = 's-' + state;
   el.textContent = SYNC_TEXT[state] + (n && !['ok', 'off', 'busy'].includes(state) ? ` (${n})` : '');
-  el.dataset.act = state === 'off' || state === 'auth' ? 'go' : 'sync';
+  el.dataset.act = ['off', 'auth', 'old'].includes(state) ? 'go' : 'sync';
   el.dataset.v = 'settings';
 }
 
@@ -352,6 +364,41 @@ function chartSvg(entries, fromTs) {
   });
   return s + '</svg>';
 }
+// daily number of exercise sessions since fromTs
+function exChartSvg(fromTs) {
+  const today = startOfDay(Date.now());
+  const days = [];
+  for (const d = new Date(startOfDay(fromTs)); d.getTime() <= today; d.setDate(d.getDate() + 1))
+    days.push({ ts: d.getTime(), key: dayKey(d.getTime()), n: 0 });
+  const idx = Object.fromEntries(days.map((d, i) => [d.key, i]));
+  for (const { ts } of db.exercises) { const i = idx[dayKey(ts)]; if (i != null) days[i].n++; }
+  const top = Math.max(3, ...days.map(d => d.n));
+  const W = 340, H = 120, L = 22, R = 6, T = 8, B = 22, n = days.length;
+  const cw = (W - L - R) / n, bw = Math.max(1.5, Math.min(18, cw * 0.72)), ph = H - T - B;
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="chart" direction="ltr">`;
+  for (const v of [0, top]) {
+    const y = T + ph * (1 - v / top);
+    s += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" class="grid"/><text x="${L - 5}" y="${y + 3}" class="ax" text-anchor="end">${v}</text>`;
+  }
+  days.forEach((d, i) => {
+    if (!d.n) return;
+    const x = L + i * cw + (cw - bw) / 2, h = ph * d.n / top;
+    s += `<rect x="${x}" y="${H - B - h}" width="${bw}" height="${h}" rx="${Math.min(3, bw / 2)}" class="exbar"/>`;
+  });
+  [...new Set([0, Math.floor((n - 1) / 2), n - 1])].forEach(i => {
+    const anchor = i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle';
+    const x = i === 0 ? L : i === n - 1 ? W - R : L + i * cw + cw / 2;
+    s += `<text x="${x}" y="${H - 6}" class="ax" text-anchor="${anchor}">${fmtShort(days[i].ts)}</text>`;
+  });
+  return s + '</svg>';
+}
+// done exercises since `from` (optionally of one plan item), oldest first
+const exIn = (from, ex) => db.exercises.filter(x => x.ts >= from && (ex == null || x.ex === ex)).sort((a, b) => a.ts - b.ts);
+const exWord = n => n === 1 ? 'תרגול אחד' : `${n} תרגולים`;
+const exName = ex => db.plan.find(p => p.id === ex)?.name || 'תרגול';
+const activePlan = () => db.plan.filter(p => !p.end).sort((a, b) => a.start - b.start);
+const perDayText = n => n === 1 ? 'פעם ביום' : `${n} פעמים ביום`;
+
 const CHART_NOTE = `<div class="legend"><span><i style="background:var(--danger);border-radius:50%"></i>נתפס הגב</span><span>גובה העמודה = הכאב החזק ביותר באותו יום</span></div>`;
 
 /* ================= views ================= */
@@ -386,6 +433,7 @@ const VIEWS = {
     const week = all.filter(e => e.ts >= daysAgoStart(7));
     const wMax = week.reduce((m, e) => Math.max(m, entryMax(e)), 0);
     const wAvg = week.length ? (week.reduce((s, e) => s + entryMax(e), 0) / week.length).toFixed(1) : '–';
+    const exWeek = exIn(daysAgoStart(7)).length;
     const hero = lastEp
       ? `<div class="big">${Math.floor((startOfDay(Date.now()) - startOfDay(lastEp.ts)) / DAY + 0.5)}</div>
          <div class="lbl">ימים מאז שהגב נתפס לאחרונה</div><div class="muted">${fmtDay(lastEp.ts)}</div>`
@@ -394,10 +442,12 @@ const VIEWS = {
       <header class="top"><h1>מעגב</h1><div class="sub">${fmtDay(Date.now())}</div></header>
       <button class="primary huge" data-act="new">＋ כואב לי עכשיו – לתעד</button>
       ${cloudNote()}
+      ${exTodayCard()}
       <section class="card hero">${hero}</section>
       <section class="card"><h2>7 הימים האחרונים</h2>
         <div class="stats">
           <div class="stat"><b>${week.length}</b><span>תיעודים</span></div>
+          <div class="stat"><b>${exWeek}</b><span>תרגולים</span></div>
           <div class="stat"><b>${wMax || '–'}</b><span>כאב מרבי</span></div>
           <div class="stat"><b>${wAvg}</b><span>ממוצע</span></div>
         </div>
@@ -441,22 +491,23 @@ const VIEWS = {
 
   history() {
     const from = histRange === 'all'
-      ? Math.min(daysAgoStart(14), ...db.entries.map(e => e.ts))
+      ? Math.min(daysAgoStart(14), ...db.entries.map(e => e.ts), ...db.exercises.map(x => x.ts))
       : daysAgoStart(histRange);
     const list = sortedEntries().filter(e => e.ts >= from);
     const { regs } = aggregate(list);
     heatLabels = heatFills(regs);
-    let groups = '', lastDay = null;
-    for (const e of list) {
-      const k = dayKey(e.ts);
-      if (k !== lastDay) { groups += `<div class="day-h">${fmtDay(e.ts)}</div>`; lastDay = k; }
-      groups += entryRow(e);
-    }
+    // one group per day that has entries or exercises, newest first
+    const days = {};
+    for (const e of list) (days[dayKey(e.ts)] ||= { ts: e.ts, entries: [], ex: {} }).entries.push(e);
+    for (const x of exIn(from)) { const d = days[dayKey(x.ts)] ||= { ts: x.ts, entries: [], ex: {} }; d.ex[x.ex] = (d.ex[x.ex] || 0) + 1; }
+    const groups = Object.values(days).sort((a, b) => b.ts - a.ts).map(d =>
+      `<div class="day-h">${fmtDay(d.ts)}${Object.entries(d.ex).map(([ex, n]) => `<span class="ex-tag">✓ ${esc(exName(ex))}${n > 1 ? ` ×${n}` : ''}</span>`).join('')}</div>${d.entries.map(entryRow).join('')}`).join('');
     return `
       <header class="top"><h1>היסטוריה</h1></header>${cloudNote()}
       <div class="seg page-seg">${[[7, 'שבוע'], [30, 'חודש'], [90, '3 חודשים'], ['all', 'הכל']].map(([v, l]) =>
         `<button class="${histRange === v ? 'on' : ''}" data-act="hrange" data-v="${v}">${l}</button>`).join('')}</div>
       <section class="card"><h2>עוצמת כאב לאורך זמן</h2>${chartSvg(list, from)}${CHART_NOTE}</section>
+      <section class="card"><h2>תרגולים ביום</h2>${exChartSvg(from)}</section>
       <section class="card"><h2>איפה הרגשתי בתקופה הזו</h2>
         <div class="muted">המספר = כמה פעמים סומן האזור · צבע כהה יותר = עוצמה ממוצעת גבוהה יותר</div>
         <div class="seg">${PANELS.map(p => `<button class="${p.id === heatPanel ? 'on' : ''}" data-act="hpanel" data-p="${p.id}">${p.label}</button>`).join('')}</div>
@@ -498,6 +549,7 @@ const VIEWS = {
         </div>
         ${eps.length ? `<p class="muted">הגב נתפס: ${eps.map(e => fmtDate(e.ts)).reverse().join(' · ')}</p>` : ''}
       </section>
+      ${planCard(from)}
       ${list.length ? `
       <section class="card"><h2>אזורים</h2>
         <table class="rt"><thead><tr><th>אזור</th><th>פעמים</th><th>ממוצע</th><th>מקס׳</th></tr></thead><tbody>${rows}</tbody></table>
@@ -530,7 +582,8 @@ const VIEWS = {
         <div class="btn-col" style="margin-top:10px">
           <button class="primary" data-act="connect">${connected ? 'שמירה וסנכרון' : 'התחברות'}</button>
         </div>
-        ${connected ? `<p class="muted">מצב: ${SYNC_TEXT[syncState]} · ${db.entries.length} תיעודים</p>` : ''}
+        ${syncState === 'old' ? '<p class="muted"><b>הסקריפט בגיליון ישן.</b> כדי לשמור תרגולים ואת תוכנית התרגול: להדביק בעורך את הגרסה החדשה של Code.gs (לשמור על שורת ה-SECRET), ואז Deploy ← Manage deployments ← עיפרון ← New version ← Deploy. עד אז התרגולים נשמרים בטלפון.</p>' : ''}
+        ${connected ? `<p class="muted">מצב: ${SYNC_TEXT[syncState]} · ${db.entries.length} תיעודים · ${db.exercises.length} תרגולים</p>` : ''}
         <div style="display:flex;justify-content:space-between">
           <button class="link" data-act="new-secret">קוד סודי חדש</button>
           ${connected ? '<button class="link" data-act="disconnect">ניתוק מהגיליון</button>' : ''}
@@ -548,9 +601,62 @@ const VIEWS = {
           <button class="secondary" data-act="import">טעינה מקובץ</button>
         </div>
       </section>
-      <p class="muted" style="text-align:center">מעגב · גרסה 2.0</p>`;
+      <p class="muted" style="text-align:center">מעגב · גרסה 2.2</p>`;
   },
 };
+
+/* ================= exercise plan ================= */
+
+// home: today's count for each exercise the therapist gave, with a button to mark one done
+function exTodayCard() {
+  const today = startOfDay(Date.now()), plan = activePlan();
+  const row = (ex, name, details, perDay) => {
+    const n = exIn(today, ex).length, done = perDay && n >= perDay;
+    return `<div class="ex-item${done ? ' done' : ''}">
+      <div class="ex-info"><b>${esc(name)}</b>${details ? `<span>${esc(details)}</span>` : ''}</div>
+      ${n ? `<button class="ex-undo" data-act="ex-undo" data-ex="${ex}" aria-label="ביטול הסימון האחרון">↶</button>` : ''}
+      <div class="ex-n">${n}${perDay ? `<small>/${perDay}</small>` : ''}</div>
+      <button class="ex-plus" data-act="ex-add" data-ex="${ex}" aria-label="סימון ביצוע">✓</button>
+    </div>`;
+  };
+  const rows = plan.map(p => row(p.id, p.name, p.details, p.perDay));
+  // exercises marked without a plan item (before there was a plan)
+  if (!plan.length || exIn(today, '').length) rows.push(row('', plan.length ? 'תרגול אחר' : 'תרגול', '', 0));
+  return `<section class="card"><h2>תרגול היום</h2>${rows.join('')}
+    ${plan.length ? '' : '<div class="muted">אפשר להוסיף את התרגילים שהמטפל נתן במסך "למטפל", ואז לסמן כל אחד בנפרד.</div>'}
+  </section>`;
+}
+
+// therapist screen: the plan with how well each exercise was kept in the range
+function planCard(from) {
+  const today = startOfDay(Date.now());
+  const items = db.plan.filter(p => !p.end || p.end >= from).sort((a, b) => !!a.end - !!b.end || a.start - b.start);
+  const other = exIn(from, '').length;
+  const rows = items.map(p => {
+    const st = planStats(p, from);
+    return `<tr class="${p.end ? 'ended' : ''}"><td><b>${esc(p.name)}</b>${p.details ? `<div class="k">${esc(p.details)}</div>` : ''}
+        <div class="k">${p.perDay ? perDayText(p.perDay) + ' · ' : ''}מ-${fmtDate(p.start)}${p.end ? ` עד ${fmtDate(p.end)}` : ''}</div>
+        <button class="link no-print" data-act="plan-edit" data-id="${p.id}">עריכה</button></td>
+      <td class="n">${st.count}</td><td class="n">${st.days}/${st.span}</td><td class="n">${st.pct == null ? '–' : st.pct + '%'}</td></tr>`;
+  }).join('') + (other ? `<tr><td>ללא תרגיל מסוים</td><td class="n">${other}</td><td class="n">${new Set(exIn(from, '').map(x => dayKey(x.ts))).size}</td><td class="n">–</td></tr>` : '');
+  const any = items.length || other;
+  return `<section class="card${any ? '' : ' no-print'}"><h2>תוכנית התרגול</h2>
+    ${any ? `<table class="rt"><thead><tr><th>תרגיל</th><th>ביצועים</th><th>ימים</th><th>עמידה ביעד</th></tr></thead><tbody>${rows}</tbody></table>
+      ${exIn(from).length ? `<div class="lab-s">תרגולים ביום</div>${exChartSvg(from)}` : ''}`
+      : '<p class="muted">כאן רושמים את התרגילים שהמטפל נותן. כל תרגיל יופיע במסך הבית לסימון, ובסיכום הבא יופיע כמה פעמים בוצע.</p>'}
+    <button class="secondary no-print" style="margin-top:10px" data-act="plan-new">＋ הוספת תרגיל מהמטפל</button>
+  </section>`;
+}
+
+// one plan item in the range: count, days done out of days it was in the plan, % of the daily target
+function planStats(p, from) {
+  const a = Math.max(startOfDay(from), startOfDay(p.start));
+  const b = Math.min(startOfDay(Date.now()), p.end ? startOfDay(p.end) : Infinity);
+  const span = Math.max(1, Math.round((b - a) / DAY) + 1);
+  const list = exIn(a, p.id).filter(x => !p.end || x.ts <= p.end);
+  const pct = p.perDay ? Math.min(100, Math.round(100 * list.length / (p.perDay * span))) : null;
+  return { count: list.length, days: new Set(list.map(x => dayKey(x.ts))).size, span, pct };
+}
 
 function natureText(n) {
   const known = Object.entries(n).filter(([k]) => k !== 'unsure');
@@ -573,13 +679,39 @@ function go(v) { view = v; render(); window.scrollTo(0, 0); }
 
 function openSheet(r) {
   const cur = draft.regions[r];
-  sheet = { r, exists: !!cur, ...(cur || { kind: 'pain', level: 5, nature: 'unsure' }) };
+  sheet = { type: 'region', r, exists: !!cur, ...(cur || { kind: 'pain', level: 5, nature: 'unsure' }) };
   renderSheet();
+}
+function openPlanSheet(id) {
+  const p = db.plan.find(x => x.id === id);
+  sheet = { type: 'plan', exists: !!p, ...(p || { id: uid(), name: '', details: '', perDay: 0, start: Date.now(), end: null }) };
+  renderSheet();
+  if (!p) $('#planName').focus();
 }
 function renderSheet() {
   const el = $('#sheet');
   if (!sheet) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
+  if (sheet.type === 'plan') {
+    el.innerHTML = `
+    <div class="sheet-bg" data-act="s-close"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h2>${sheet.exists ? 'עריכת תרגיל' : 'תרגיל חדש מהמטפל'}</h2>
+      <div class="lab">שם התרגיל</div>
+      <input type="text" id="planName" class="txt" value="${esc(sheet.name)}" placeholder="למשל: גשר, חתול-גמל, מתיחת פיריפורמיס">
+      <div class="lab">איך מבצעים <small class="muted">(רשות)</small></div>
+      <textarea id="planDetails" placeholder="למשל: 3 סטים של 10 חזרות, להחזיק 5 שניות">${esc(sheet.details)}</textarea>
+      <div class="lab">כמה פעמים ביום?</div>
+      <div class="seg" id="planPer">${[[0, 'לא נקבע'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5']].map(([v, l]) => `<button class="${sheet.perDay === v ? 'on' : ''}" data-act="p-per" data-v="${v}">${l}</button>`).join('')}</div>
+      <div class="row">
+        ${sheet.exists && !sheet.end ? '<button class="danger" data-act="p-end">הוצאה מהתוכנית</button>' : ''}
+        <button class="primary" data-act="p-save">שמירה</button>
+      </div>
+      ${sheet.exists ? '<button class="link del-link" data-act="p-delete">מחיקת התרגיל לגמרי</button>' : ''}
+    </div>`;
+    return;
+  }
   el.innerHTML = `
     <div class="sheet-bg" data-act="s-close"></div>
     <div class="sheet">
@@ -613,6 +745,16 @@ function summaryText() {
   let t = `סיכום כאבי גב ${fmtDate(from)} – ${fmtDate(Date.now())}\n`;
   t += `תיעודים: ${list.length} | ימים עם תסמינים: ${new Set(list.map(e => dayKey(e.ts))).size}\n`;
   t += eps.length ? `הגב נתפס ${eps.length} פעמים: ${eps.join(', ')}\n` : 'הגב לא נתפס בתקופה\n';
+  const items = db.plan.filter(p => !p.end || p.end >= from);
+  if (items.length) {
+    t += '\nתוכנית תרגול:\n';
+    for (const p of items) {
+      const st = planStats(p, from);
+      t += `• ${p.name}${p.details ? ` (${p.details})` : ''}${p.end ? ` – הוצא מהתוכנית ${fmtDate(p.end)}` : ''}: ${st.count === 1 ? 'בוצע פעם אחת' : `בוצע ${st.count} פעמים`}, ב-${st.days} מתוך ${st.span} ימים${st.pct != null ? `, ${st.pct}% מהיעד (${perDayText(p.perDay)})` : ''}\n`;
+    }
+  }
+  const other = exIn(from, '').length;
+  if (other) t += `תרגולים ללא תרגיל מסוים: ${other}\n`;
   t += '\nאזורים:\n';
   for (const [r, a] of Object.entries(regs).sort((x, y) => y[1].count - x[1].count))
     t += `• ${REGIONS[r]}: ${a.count === 1 ? 'פעם אחת' : a.count + ' פעמים'}, ממוצע ${a.avg.toFixed(1)}, מקס' ${a.max} – ${Object.keys(a.kinds).map(k => KINDS[k].label).join('/')}${natureText(a.natures)}\n`;
@@ -648,7 +790,9 @@ $('#importFile').addEventListener('change', async ev => {
   try {
     const d = JSON.parse(await f.text());
     if (!Array.isArray(d.entries)) throw new Error('bad');
-    change(...d.entries.map(upsertOp), ...(d.visits || []).filter(v => !db.visits.includes(v)).map(visitOp));
+    change(...d.entries.map(upsertOp), ...(d.visits || []).filter(v => !db.visits.includes(v)).map(visitOp),
+      ...(d.plan || []).map(planOp),
+      ...(d.exercises || []).filter(x => !db.exercises.some(y => y.ts === x.ts)).map(x => exOp(x.ts, x.ex)));
     render();
     toast(`נטענו ${d.entries.length} תיעודים`);
   } catch (e) { toast('הקובץ לא תקין'); }
@@ -709,6 +853,40 @@ const ACTIONS = {
     if (!confirm('לרשום שהיום היית אצל המטפל? הסיכום הבא יתחיל מהיום.')) return;
     change(visitOp(Date.now())); sumRange = 'visit'; render(); toast('נרשם ביקור');
   },
+  'ex-add': a => {
+    const ex = a.dataset.ex, p = db.plan.find(x => x.id === ex);
+    change(exOp(Date.now(), ex)); render();
+    const n = exIn(startOfDay(Date.now()), ex).length;
+    toast(p?.perDay && n === p.perDay ? `כל הכבוד! השלמת את "${p.name}" להיום` : `✓ ${exName(ex)}: ${n === 1 ? 'פעם ראשונה' : `${n} פעמים`} היום`);
+  },
+  'ex-undo': a => {
+    const ex = a.dataset.ex, last = exIn(startOfDay(Date.now()), ex).pop();
+    if (!last || !confirm(`לבטל את הסימון של "${exName(ex)}" מ-${fmtTime(last.ts)}?`)) return;
+    change({ op: 'delEx', ts: last.ts }); render();
+  },
+  'plan-new': () => openPlanSheet(null),
+  'plan-edit': a => openPlanSheet(a.dataset.id),
+  'p-per': a => {
+    sheet.perDay = +a.dataset.v;
+    $('#planPer').querySelectorAll('button').forEach(b => b.classList.toggle('on', b === a));
+  },
+  'p-save': () => {
+    const name = $('#planName').value.trim();
+    if (!name) return toast('צריך לתת שם לתרגיל');
+    const { type, exists, ...p } = sheet;
+    change(planOp({ ...p, name, details: $('#planDetails').value.trim() }));
+    closeSheet(); render(); toast(exists ? 'נשמר ✓' : 'התרגיל נוסף – אפשר לסמן אותו במסך הבית');
+  },
+  'p-delete': () => {
+    const n = db.exercises.filter(x => x.ex === sheet.id).length;
+    if (!confirm(`למחוק את "${sheet.name}" לגמרי?${n ? ` גם ${n === 1 ? 'הסימון שלו יימחק' : `${n} הסימונים שלו יימחקו`} ולא יופיעו בסיכומים.` : ''}`)) return;
+    change({ op: 'delPlan', id: sheet.id }); closeSheet(); render(); toast('התרגיל נמחק');
+  },
+  'p-end': () => {
+    if (!confirm(`להוציא את "${sheet.name}" מהתוכנית? מה שבוצע עד היום יישאר בסיכומים.`)) return;
+    const { type, exists, ...p } = sheet;
+    change(planOp({ ...p, end: Date.now() })); closeSheet(); render();
+  },
   delvisit: a => { change({ op: 'delVisit', ts: +a.dataset.v }); render(); },
   export: exportBackup,
   import: () => $('#importFile').click(),
@@ -733,7 +911,7 @@ const ACTIONS = {
   },
   disconnect: () => {
     if (!confirm('לנתק את האפליקציה מהגיליון? הנתונים נשארים בגיליון.')) return;
-    cfg.url = ''; ls.set(CFG_KEY, cfg); server = { entries: [], visits: [] }; loaded = false;
+    cfg.url = ''; ls.set(CFG_KEY, cfg); server = EMPTY(); loaded = false;
     rebuild(); setSync('off'); render();
   },
 };

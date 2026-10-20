@@ -19,7 +19,7 @@
    ההרשאה צריכה להיות רק לגיליונות שהסקריפט מותקן בהם. אם מופיעה בקשה רחבה יותר – לא לאשר.
 7. להעתיק את ה-**Web app URL** (מסתיים ב-`/exec`), ולהדביק באפליקציה בלשונית **ענן** ← "התחברות".
 
-בגיליון ייווצרו שתי לשוניות: **תיעודים** (שורה לכל תיעוד, בעמודות קריאות + עמודת `data` שהאפליקציה משתמשת בה – לא לערוך אותה) ו-**ביקורים**.
+בגיליון ייווצרו שלוש לשוניות: **תיעודים** (שורה לכל תיעוד, בעמודות קריאות + עמודת `data` שהאפליקציה משתמשת בה – לא לערוך אותה), **ביקורים**, **תוכנית תרגול** (התרגילים שהמטפל נתן) ו-**תרגולים** (שורה לכל פעם שסומן ביצוע).
 
 **עדכון הסקריפט בעתיד:** אחרי עריכה – Deploy → Manage deployments ← עיפרון ← Version: **New version** ← Deploy. כך הכתובת נשארת אותה כתובת.
 
@@ -44,11 +44,14 @@ node dev/mock-apps-script.js 8766 test-secret
 
 ## פרוטוקול
 כל בקשה היא `POST` לכתובת הסקריפט עם גוף `text/plain` (כדי להימנע מ-CORS preflight):
-`{ secret, ops: [{op:'upsert', entry, cells} | {op:'delete', id} | {op:'addVisit', ts, label} | {op:'delVisit', ts}] }`
-והתשובה: `{ ok, entries, visits }` – כל הנתונים אחרי ביצוע הפעולות. כל הפעולות אידמפוטנטיות, כך ששליחה חוזרת אחרי תקלת רשת לא מזיקה.
+`{ secret, ops: [{op:'upsert', entry, cells} | {op:'delete', id} | {op:'addVisit', ts, label} | {op:'delVisit', ts} | {op:'addEx', ts, ex, name, date, time} | {op:'delEx', ts} | {op:'upsertPlan', item, cells} | {op:'delPlan', id}] }`
+והתשובה: `{ ok, entries, visits, exercises, plan }` – כל הנתונים אחרי ביצוע הפעולות. כל הפעולות אידמפוטנטיות, כך ששליחה חוזרת אחרי תקלת רשת לא מזיקה.
 
 ## מודל נתונים
 ```js
 entry = { id, ts, regions: { [regionId]: { kind: 'pain'|'numb'|'tingle', level: 1-10, nature: 'muscle'|'nerve'|'unsure' } },
           episode: bool /* הגב נתפס */, triggers: [string], notes }
+visits = [ts]
+plan = [{ id, name, details, perDay /* 0 = לא נקבע */, start, end /* null = עדיין בתוכנית */ }]
+exercises = [{ ts, ex /* plan id, או '' לתרגול כללי */ }]
 ```

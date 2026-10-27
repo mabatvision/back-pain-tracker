@@ -69,6 +69,7 @@ button { cursor: pointer; }
 #syncbar { display: block; margin: 8px auto 0; border: 0; border-radius: 999px; padding: 4px 12px; font-size: 13px; background: var(--card); color: var(--muted); }
 #syncbar.s-ok { background: none; }
 #syncbar.s-off, #syncbar.s-auth, #syncbar.s-old, #syncbar.s-error { background: #fdecea; color: var(--danger); font-weight: 600; }
+.alert { background: #fdecea; color: var(--danger); border-radius: 12px; padding: 12px 14px; margin-top: 12px; line-height: 1.5; }
 #syncbar.s-pending, #syncbar.s-offline { background: #fff4d6; color: #8a5a00; font-weight: 600; }
 body.editing #syncbar { display: none; }
 .secret-row { display: flex; gap: 8px; align-items: center; }

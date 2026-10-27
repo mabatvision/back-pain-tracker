@@ -204,6 +204,7 @@ async function syncNow() {
     if (['home', 'history', 'summary'].includes(view)) render();
   } catch (err) {
     setSync(err.message === 'unauthorized' ? 'auth' : navigator.onLine === false ? 'offline' : 'error');
+    if (syncState === 'auth' && ['home', 'history', 'summary'].includes(view)) render();
   }
   const again = syncing.again;
   syncing = null; finish();
@@ -218,7 +219,7 @@ const SYNC_TEXT = {
   ok: 'מסונכרן ✓',
   pending: 'יש שינויים שממתינים לשליחה',
   offline: 'אין אינטרנט – יישלח כשיחזור החיבור',
-  auth: 'הקוד הסודי לא תואם לסקריפט',
+  auth: 'הקוד הסודי לא תואם לגיליון – לתיקון',
   old: 'צריך לעדכן את הסקריפט בגיליון כדי לשמור תרגולים',
   error: 'אין חיבור לגיליון – ננסה שוב',
 };
@@ -422,6 +423,9 @@ function cloudNote() {
   if (!cfg.url) return `<section class="card"><b>האפליקציה עוד לא מחוברת לגיליון.</b>
     <div class="muted">תיעודים חדשים נשמרים בינתיים בטלפון ויישלחו אחרי החיבור.</div>
     <button class="secondary" style="margin-top:10px" data-act="go" data-v="settings">לחיבור</button></section>`;
+  if (syncState === 'auth') return `<section class="card alert"><b>אין סנכרון: הקוד הסודי בטלפון לא תואם לקוד שבגיליון.</b>
+    <div>הנתונים בגיליון בטוחים. תיעודים חדשים נשמרים בטלפון ויישלחו אחרי התיקון.</div>
+    <button class="secondary" style="margin-top:10px" data-act="go" data-v="settings">לתיקון הקוד</button></section>`;
   if (loaded) return '';
   return `<section class="card muted">${syncState === 'busy' ? 'טוען נתונים מהגיליון…' : 'אין חיבור לגיליון – הנתונים יוצגו כשיחזור החיבור.'}</section>`;
 }
@@ -582,6 +586,7 @@ const VIEWS = {
         <div class="btn-col" style="margin-top:10px">
           <button class="primary" data-act="connect">${connected ? 'שמירה וסנכרון' : 'התחברות'}</button>
         </div>
+        ${syncState === 'auth' ? `<div class="alert"><b>הקוד הסודי כאן לא תואם לקוד שבגיליון</b>, ולכן אין סנכרון. כדי למצוא את הקוד הנכון: לפתוח את הגיליון ← Extensions ← Apps Script, ולהעתיק את מה שבין המירכאות בשורה <span dir="ltr">const SECRET = '…'</span>. להדביק אותו בשדה 1 וללחוץ "שמירה וסנכרון". אין צורך ללחוץ על "קוד סודי חדש".</div>` : ''}
         ${syncState === 'old' ? '<p class="muted"><b>הסקריפט בגיליון ישן.</b> כדי לשמור תרגולים ואת תוכנית התרגול: להדביק בעורך את הגרסה החדשה של Code.gs (לשמור על שורת ה-SECRET), ואז Deploy ← Manage deployments ← עיפרון ← New version ← Deploy. עד אז התרגולים נשמרים בטלפון.</p>' : ''}
         ${connected ? `<p class="muted">מצב: ${SYNC_TEXT[syncState]} · ${db.entries.length} תיעודים · ${db.exercises.length} תרגולים</p>` : ''}
         <div style="display:flex;justify-content:space-between">
